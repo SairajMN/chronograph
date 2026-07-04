@@ -33,5 +33,7 @@ Thumbs.db
 # Logs
 *.log
 
-#one
+# Data files
+seed-events.json
 
+#db

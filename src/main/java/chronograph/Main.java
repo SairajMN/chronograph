@@ -86,35 +86,43 @@ public class Main {
     // ── Seed ──────────────────────────────────────────────────────────────
 
     private static void seedDemoData() throws Exception {
-        // A rich ecosystem of services with branching, removal, self-loop, and
-        // cascading failure
-        // Timeline:
-        // T10 add db → auth core database drives auth
-        // T20 add auth → payment payment depends on auth
-        // T30 add auth → checkout checkout also depends on auth
-        // T40 add payment → ledger payment writes to ledger
-        // T50 add checkout → invoice invoice after checkout
-        // T60 add auth → audit audit trail from auth
-        // T70 add payment → fraud fraud check before payment (!)
-        // T80 remove payment → fraud fraud link dies — payment bypasses
-        // T90 add fraud → fraud self-loop cycle for SCC demo
-        //
-        // At T75: db → auth → payment → ledger
-        // → checkout → invoice
-        // → audit
-        // auth → payment → fraud → fraud (cycle!)
-        // At T85: fraud is orphaned, payment → fraud removed
-        //
-        store.append(10, "add", "db", "auth");
-        store.append(20, "add", "auth", "payment");
-        store.append(30, "add", "auth", "checkout");
-        store.append(40, "add", "payment", "ledger");
-        store.append(50, "add", "checkout", "invoice");
-        store.append(60, "add", "auth", "audit");
-        store.append(70, "add", "payment", "fraud");
-        store.append(80, "remove", "payment", "fraud");
-        store.append(90, "add", "fraud", "fraud");
-        System.out.println("seeded demo data: db → auth → {payment→ledger, checkout→invoice} + audit + fraud cycle");
+        var json = Files.readString(Path.of("seed-events.json"));
+        var eventsArrayStart = json.indexOf("\"events\":");
+        var eventsStart = json.indexOf('[', eventsArrayStart);
+        var eventsEnd = json.lastIndexOf(']');
+        var eventsStr = json.substring(eventsStart + 1, eventsEnd).trim();
+
+        // Parse each event object
+        var count = 0;
+        var i = 0;
+        while (i < eventsStr.length()) {
+            // Find next event object
+            var seqStart = eventsStr.indexOf("\"seq\"", i);
+            if (seqStart < 0)
+                break;
+
+            var objStart = eventsStr.lastIndexOf('{', seqStart);
+            var objEnd = eventsStr.indexOf('}', objStart);
+            if (objStart < 0 || objEnd < 0)
+                break;
+
+            var eventJson = eventsStr.substring(objStart, objEnd + 1);
+
+            var seq = extractLong(eventJson, "seq");
+            var ts = extractLong(eventJson, "ts");
+            var type = extractString(eventJson, "type");
+            var src = extractString(eventJson, "src");
+            var dst = extractString(eventJson, "dst");
+
+            if (ts > 0 && type != null && src != null && dst != null) {
+                var mappedType = "ADD_EDGE".equals(type) ? "add" : "remove";
+                store.append(ts, mappedType, src, dst);
+                count++;
+            }
+
+            i = objEnd + 1;
+        }
+        System.out.println("seeded " + count + " events from seed-events.json");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────
@@ -309,21 +317,36 @@ public class Main {
     // ── Minimal JSON parser ───────────────────────────────────────────────
 
     private static String extractString(String json, String key) {
-        var search = "\"" + key + "\":\"";
+        var search = "\"" + key + "\"";
         var idx = json.indexOf(search);
         if (idx < 0)
             return null;
-        idx += search.length();
-        var end = json.indexOf("\"", idx);
+        idx = json.indexOf(':', idx + search.length());
+        if (idx < 0)
+            return null;
+        idx++;
+        // Skip whitespace
+        while (idx < json.length() && Character.isWhitespace(json.charAt(idx)))
+            idx++;
+        if (idx >= json.length() || json.charAt(idx) != '"')
+            return null;
+        idx++;
+        var end = json.indexOf('"', idx);
         return end < 0 ? null : json.substring(idx, end);
     }
 
     private static long extractLong(String json, String key) {
-        var search = "\"" + key + "\":";
+        var search = "\"" + key + "\"";
         var idx = json.indexOf(search);
         if (idx < 0)
             return 0;
-        idx += search.length();
+        idx = json.indexOf(':', idx + search.length());
+        if (idx < 0)
+            return 0;
+        idx++;
+        // Skip whitespace
+        while (idx < json.length() && Character.isWhitespace(json.charAt(idx)))
+            idx++;
         var end = idx;
         while (end < json.length() && Character.isDigit(json.charAt(end)))
             end++;
