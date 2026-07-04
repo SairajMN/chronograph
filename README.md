@@ -243,7 +243,7 @@ flowchart LR
     db --> auth --> checkout --> invoice
     auth --> payment --> ledger
     auth --> audit
-    subgraph ""
+    subgraph fraud_group
         direction TB
         payment --> fraud
     end
@@ -574,6 +574,3 @@ Six endpoints. No dependency injection. No auto-configuration. No embedded Tomca
 5. **Records over beans.** No getter/setter POJOs with builders.
 6. **Every algorithm ships with one test.** Table-driven JUnit, no mocks or fixtures.
 
-## License
-
-MIT. Use it, fork it, break it.
